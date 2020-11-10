@@ -27,7 +27,31 @@ class Server:
 
     def listen(self):
         res = self.socket.recv_multipart()
+        cmd = res[0].decode('utf-8')
 
+        if cmd == 'connect':
+            ipClient = res[1].decode('utf-8')
+            idClient = res[2].decode('utf-8')
+            if in_interval(idClient):
+                self.socket.send_multipart([b'in_interval', self.succesor.encode('utf-8')])
+
+                self.socket = self.context.socket(zmq.REQ)
+                self.connection = self.socket.connect("tcp://localhost:"+self.succesor)
+                self.socket.send_multipart([b'change_pred', ipClient.encode('utf-8')])
+                self.socket.recv_multipart()
+
+                self.socket = self.context.socket(zmq.REP)
+                self.connection = self.socket.bind("tcp://*:"+self.ip)
+                self.succesor = ipClient
+                
+        
+        elif cmd == 'change_pred':
+            newPred = res[1].decode('utf-8')
+            self.pred = newPred
+            self.socket.send_multipart([b'changed predecessor'])
+
+    def in_interval(self, id):
+            return True
 
     def id_assignment(self):
         numRandom = str(random.randrange(5000)).encode('utf-8')
@@ -39,10 +63,20 @@ class Server:
         return self.id  #ELIMINAR DESPUÉS
     
     def server_connection(self, ipGenesis = 0):
-        self.socket = self.context.socket(zmq.REQ)
-        self.connection = self.socket.connect("tcp://localhost:"+self.succesor)
-        self.socket.send_multipart([self.ip.encode('utf-8'), self.id.encode('utf-8')])
-        res = self.socket.recv_multipart()
+        while True:
+            self.socket = self.context.socket(zmq.REQ)
+            self.connection = self.socket.connect("tcp://localhost:"+self.succesor)
+            self.socket.send_multipart([b'connect', self.ip.encode('utf-8'), self.id.encode('utf-8')])
+            res = self.socket.recv_multipart()
+
+            if res[0].decode('utf-8') == 'in_interval':
+                self.succesor = res[1].decode('utf-8')
+                break
+            else:
+                self.succesor = res[1].decode('utf-8')
+
+
+        #Hasta aqui nuevo
         ans = res[0].decode('utf-8')
         if ans == 'Y':
             self.succesor = res[1]
